@@ -1,3 +1,7 @@
+> **This is a fork.** Based on `eb75868`, upstream's last commit (19 August 2024).
+> It adds MQTT over TLS (`mqtts://`), fixes Home Assistant discovery on HA 2026.9.0,
+> and points the OTA update check at this repository. See **[FORK.md](FORK.md)**.
+
 # ESPSomfy-RTS <image src="https://user-images.githubusercontent.com/47839015/218898940-3541b360-5c49-4e38-a918-392cd0408b76.png" align="right" style="width:177px;display:inline-block;float:right"></image>
 
 A controller for Somfy RTS blinds and shades that supports up to 32 individual shades and 16 groups over 433MHz RTx protocols.  If you have IO Home Control motors this project is not for you but you can use the IO Remote protocol to connect the ESPSomfy RTS device to a disected remote.  Look in the [Wiki](https://github.com/rstrouse/ESPSomfy-RTS/wiki/Controlling-Motors-with-GPIO) for options and verify whether the solution is workable for you.

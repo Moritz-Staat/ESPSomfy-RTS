@@ -1,4 +1,6 @@
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <strings.h>  // strncasecmp
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <esp_task_wdt.h>
@@ -9,6 +11,9 @@
 #include "Utils.h"
 
 WiFiClient tcpClient;
+// Allocated the first time an mqtts:// broker is configured.  Keeping it off the plain
+// path means installations that do not use TLS pay neither heap nor handshake for it.
+static WiFiClientSecure *tlsClient = nullptr;
 PubSubClient mqttClient(tcpClient);
 
 #define MQTT_MAX_RESPONSE 2048
@@ -198,12 +203,34 @@ bool MQTTClass::connect() {
     uint64_t mac = ESP.getEfuseMac();
     snprintf(this->clientId, sizeof(this->clientId), "client-%08x%08x", (uint32_t)((mac >> 32) & 0xFFFFFFFF), (uint32_t)(mac & 0xFFFFFFFF));
     if(strlen(settings.MQTT.protocol) > 0 && strlen(settings.MQTT.hostname) > 0) {
+      // Pick the transport from the configured protocol.  mqtts:// wraps the session in TLS
+      // so the broker credentials do not travel in the clear, which matters as soon as the
+      // broker is not on the local network.  The TLS stack is already linked in for the
+      // GitHub OTA client (GitOTA.cpp), so this costs no additional flash.
+      if(strncasecmp(settings.MQTT.protocol, "mqtts", 5) == 0) {
+        if(!tlsClient) {
+          tlsClient = new WiFiClientSecure();
+          // No CA certificate is stored on the device, so the broker is not authenticated.
+          // The session is still encrypted, which is what keeps the credentials off the
+          // wire.  This is the same trade the OTA client already makes with GitHub.
+          if(tlsClient) tlsClient->setInsecure();
+        }
+        if(tlsClient) mqttClient.setClient(*tlsClient);
+      }
+      else mqttClient.setClient(tcpClient);
       mqttClient.setServer(settings.MQTT.hostname, settings.MQTT.port);
       char lwtTopic[128] = "status";
       if(strlen(settings.MQTT.rootTopic) > 0)
         snprintf(lwtTopic, sizeof(lwtTopic), "%s/status", settings.MQTT.rootTopic);
       esp_task_wdt_reset();
-      if(mqttClient.connect(this->clientId, settings.MQTT.username, settings.MQTT.password, lwtTopic, 0, true, "offline")) {
+      // A TLS handshake takes a second or more on an ESP32 and it happens inside connect().
+      // Step out of the task watchdog for its duration, the same way the file streaming code
+      // does, so that a slow or unreachable broker cannot reboot the controller.
+      esp_task_wdt_delete(NULL);
+      bool didConnect = mqttClient.connect(this->clientId, settings.MQTT.username, settings.MQTT.password, lwtTopic, 0, true, "offline");
+      esp_task_wdt_add(NULL);
+      esp_task_wdt_reset();
+      if(didConnect) {
         Serial.print("Successfully connected MQTT client ");
         Serial.println(this->clientId);
         this->publish("status", "online", true);
@@ -336,7 +363,10 @@ bool MQTTClass::publishBuffer(const char *topic, uint8_t *data, uint16_t len, bo
   mqttClient.beginPublish(topic, len, retain);
   do { 
     buff_len = to_write;
-    if(buff_len > 128) buff_len = 128;
+    // Every write() becomes its own TLS record once the transport is encrypted, and each
+    // record carries about 29 bytes of overhead.  Larger chunks keep the ~2KB discovery
+    // payloads down to a handful of records instead of sixteen.
+    if(buff_len > 512) buff_len = 512;
     res = mqttClient.write(data+offset, buff_len);
     offset += buff_len;
     to_write -= buff_len;

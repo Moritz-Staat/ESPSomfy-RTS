@@ -1481,8 +1481,10 @@ void SomfyShade::publishDisco() {
   //snprintf(topic, sizeof(topic), "mqtt_espsomfyrts_%s_shade%d", settings.serverId, this->shadeId);
   snprintf(topic, sizeof(topic), "mqtt_espsomfyrts_%s", settings.serverId);
   arrids.add(topic);
-  //snprintf(topic, sizeof(topic), "ESPSomfy-RTS_%s", settings.serverId);
-  dobj["via_device"] = topic;
+  // via_device is deliberately absent.  It used to be published carrying the very same
+  // identifier as the device itself, which Home Assistant 2026.9.0 rejects with
+  // "A device can not be its own via device" -- the shades then never appear at all.
+  // Every shade belongs to the one controller device, so there is no parent to name.
   dobj["model"] = "ESPSomfy-RTS MQTT";
   snprintf(topic, sizeof(topic), "%s/status", settings.MQTT.rootTopic);
   obj["availability_topic"] = topic;
