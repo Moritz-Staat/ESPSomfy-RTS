@@ -5,7 +5,7 @@ A fork of [rstrouse/ESPSomfy-RTS](https://github.com/rstrouse/ESPSomfy-RTS), bas
 to make one thing possible: **reaching a controller that sits in someone else's network,
 without putting any extra hardware into that network.**
 
-Three changes, nothing else.
+Four changes, nothing else.
 
 ---
 
@@ -85,7 +85,35 @@ devices were registered before the Home Assistant upgrade; a fresh setup hits th
 
 ---
 
-## 3. OTA points at this fork
+## 3. Discovery topics carry the controller id
+
+The discovery configuration was published to `<prefix>/cover/<shadeId>/config` — the
+controller is nowhere in that path. Two ESPSomfy controllers on one broker therefore
+publish shade 1 to the very same topic and silently overwrite each other's configuration;
+only one of the two ever appears in Home Assistant. The `unique_id` inside the payload
+differs, but that does not help — the retained message at that topic is what HA reads.
+
+Home Assistant's discovery topic accepts an optional node id:
+`<prefix>/<component>/[<node_id>/]<object_id>/config`. The controller's `serverId` (six hex
+characters, so within the allowed character set) is now published as that node id, in all
+six places that build such a topic — publish, unpublish, and the cleanup path for deleted
+shades:
+
+```
+homeassistant/cover/a1b2c3/1/config
+```
+
+**Upgrading an existing installation leaves orphans.** The retained configuration at the
+old topic is not cleared by this build, because `unpublishDisco()` now writes to the new
+path. Clear it once by hand, then delete the leftover device in Home Assistant:
+
+```bash
+mosquitto_pub -h <broker> -t 'homeassistant/cover/1/config' -r -n
+```
+
+---
+
+## 4. OTA points at this fork
 
 `GitOTA.cpp` had the upstream repository hard-coded in five places. They now point here, so
 the update check looks at this fork's releases instead of upstream's — otherwise a device

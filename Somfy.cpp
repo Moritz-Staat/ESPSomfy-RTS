@@ -1580,7 +1580,7 @@ void SomfyShade::publishDisco() {
       obj["tilt_command_topic"] = "~/tiltTarget/set";
       obj["tilt_status_topic"] = "~/tiltPosition";
     }
-    snprintf(topic, sizeof(topic), "%s/cover/%d/config", settings.MQTT.discoTopic, this->shadeId);
+    snprintf(topic, sizeof(topic), "%s/cover/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, this->shadeId);
   }
   else {
     obj["payload_on"] = 100;
@@ -1589,7 +1589,7 @@ void SomfyShade::publishDisco() {
     obj["state_on"] = 100;
     obj["state_topic"] = "~/position";
     obj["command_topic"] = "~/target/set";
-    snprintf(topic, sizeof(topic), "%s/switch/%d/config", settings.MQTT.discoTopic, this->shadeId);
+    snprintf(topic, sizeof(topic), "%s/switch/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, this->shadeId);
   }
   
   obj["enabled_by_default"] = true;
@@ -1599,10 +1599,10 @@ void SomfyShade::unpublishDisco() {
   if(!mqtt.connected() || !settings.MQTT.pubDisco) return;
   char topic[128] = "";
   if(this->shadeType != shade_types::drycontact && this->shadeType != shade_types::drycontact2) {
-    snprintf(topic, sizeof(topic), "%s/cover/%d/config", settings.MQTT.discoTopic, this->shadeId);
+    snprintf(topic, sizeof(topic), "%s/cover/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, this->shadeId);
   }
   else
-    snprintf(topic, sizeof(topic), "%s/switch/%d/config", settings.MQTT.discoTopic, this->shadeId);
+    snprintf(topic, sizeof(topic), "%s/switch/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, this->shadeId);
   mqtt.unpublish(topic);
 }
 void SomfyShade::publish() {
@@ -1670,9 +1670,9 @@ void SomfyShade::unpublish(uint8_t id) {
     SomfyShade::unpublish(id, "sunny");
     if(settings.MQTT.pubDisco) {
       char topic[128] = "";
-      snprintf(topic, sizeof(topic), "%s/cover/%d/config", settings.MQTT.discoTopic, id);
+      snprintf(topic, sizeof(topic), "%s/cover/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, id);
       mqtt.unpublish(topic);
-      snprintf(topic, sizeof(topic), "%s/switch/%d/config", settings.MQTT.discoTopic, id);
+      snprintf(topic, sizeof(topic), "%s/switch/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, id);
       mqtt.unpublish(topic);
     }
   }
