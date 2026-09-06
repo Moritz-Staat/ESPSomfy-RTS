@@ -226,20 +226,31 @@ Fahrtrichtung im MQTT-Vokabular: `1` schließt, `-1` öffnet, `0` steht.
 
 ## 5. Flash und RAM
 
-Gemessen im Lauf `34038430510`, esp32-Core 2.0.10 wie von `ci.yaml` gepinnt. App-Partition
-`default` = 0x140000 = **1.310.720 Byte**.
+App-Partition (`default`) = 0x140000 = **1.310.720 Byte**. Zwei Builds, zwei Zahlen — und
+**maßgeblich ist der Release-Build**, denn der wird geflasht. `ci.yaml` pinnt Core 2.0.10,
+`release.yaml` pinnt 2.0.17, und auf dem klassischen ESP32 kostet der neuere Core **43 KB
+mehr**.
 
-| Board | Sketch | Belegt | Frei |
-|---|---:|---:|---:|
-| **ESP32** (knappstes Ziel) | 1.256.409 B | **95 %** | ~53 KB |
-| ESP32-C3 | 1.191.098 B | 90 % | ~117 KB |
-| ESP32-S3 | 1.172.609 B | 89 % | ~135 KB |
-| ESP32-S2 | 1.163.978 B | 88 % | ~143 KB |
+| Board | Release (Core 2.0.17) | CI (Core 2.0.10) |
+|---|---|---|
+| **ESP32** | 1.299.429 B — **99 %**, ~11 KB frei | 1.256.409 B — 95 % |
+| ESP32-C3 | 1.216.946 B — 92 %, ~92 KB frei | 1.191.098 B — 90 % |
+| ESP32-S2 | 1.184.326 B — 90 %, ~124 KB frei | 1.163.978 B — 88 % |
+| ESP32-S3 | 1.175.649 B — 89 %, ~132 KB frei | 1.172.609 B — 89 % |
 
-Statisches RAM auf dem ESP32: globale Variablen 93.936 Byte (28 %), es bleiben 233.744 Byte
-für lokale Variablen und Heap. Eine offene TLS-Sitzung hält davon dauerhaft rund 20–35 KB.
+Statisches RAM im Release-Build auf dem ESP32: globale Variablen 95.096 Byte (29 %), es
+bleiben 232.584 Byte für lokale Variablen und Heap. Eine offene TLS-Sitzung hält davon
+dauerhaft rund 20–35 KB.
 
-**Es ist also Platz, eine eigene Partitionstabelle ist nicht nötig.**
+**Was der Patch kostet:** das `esp32.bin` von v2.4.8 ist 1.306.000 Byte groß, das von
+Upstream v2.4.6 war 1.305.536 — Unterschied rund **464 Byte**. Der TLS-Stack war über den
+OTA-Client schon eingebunden, `mqtts://` ist also tatsächlich fast gratis. Die 99 % sind
+Upstreams Ausgangslage auf diesem Core, nicht das Ergebnis dieses Forks.
+
+**11 KB sind aber knapp.** Nach jeder Änderung die Größenzeile im **Release**-Log lesen. Läuft
+es künftig über, ist die Antwort nicht Code kürzen, sondern Partitionen umverteilen: LittleFS
+hat 1,44 MB, `data/` braucht nur 442 KB. Das ändert das Flash-Layout und verlangt dann einmal
+USB statt OTA.
 
 > **Korrektur eines eigenen Fehlers.** Zwischenzeitlich war hier von „rund 5 KB Luft" die
 > Rede. Diese Zahl war aus der **Dateigröße** des veröffentlichten v2.4.6-Binaries

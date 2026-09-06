@@ -140,30 +140,32 @@ SmartRC-CC1101-Driver-Lib 2.5.7, WebSockets 2.4.0.
 
 ### Flash budget
 
-The `default` partition scheme gives the app **0x140000 = 1,310,720 bytes**. Measured on
-this branch (run 34038430510, esp32 core 2.0.10 as pinned by `ci.yaml`):
+Two builds, two numbers. **The release build is the one that matters** — that is what gets
+flashed. `ci.yaml` pins esp32 core 2.0.10, `release.yaml` pins 2.0.17, and the difference is
+substantial: on the classic ESP32 the newer core costs another 43 KB.
 
-| Board | Sketch | Used | Free |
+App partition (`default` scheme) is 0x140000 = **1,310,720 bytes**.
+
+| Board | Release build (core 2.0.17) | | CI build (core 2.0.10) |
 |---|---:|---:|---:|
-| ESP32 | 1,256,409 B | **95 %** | ~53 KB |
-| ESP32-C3 | 1,191,098 B | 90 % | ~117 KB |
-| ESP32-S3 | 1,172,609 B | 89 % | ~135 KB |
-| ESP32-S2 | 1,163,978 B | 88 % | ~143 KB |
+| **ESP32** | 1,299,429 B — **99 %**, ~11 KB free | | 1,256,409 B — 95 % |
+| ESP32-C3 | 1,216,946 B — 92 %, ~92 KB free | | 1,191,098 B — 90 % |
+| ESP32-S2 | 1,184,326 B — 90 %, ~124 KB free | | 1,163,978 B — 88 % |
+| ESP32-S3 | 1,175,649 B — 89 %, ~132 KB free | | 1,172,609 B — 89 % |
 
-Static RAM on the ESP32: global variables take 93,936 bytes (28 %), leaving 233,744 bytes
-for local variables and the heap. A TLS session holds roughly 20–35 KB of that for as long
-as it is open.
+Static RAM on the ESP32 release build: globals 95,096 bytes (29 %), leaving 232,584 bytes
+for local variables and the heap. A TLS session holds roughly 20–35 KB of that while open.
 
-So there is room, and no partition surgery is needed. Two caveats worth keeping in mind:
+**What this patch costs:** the v2.4.8 `esp32.bin` asset is 1,306,000 bytes against upstream
+v2.4.6's 1,305,536 — a difference of about **464 bytes**. The TLS stack was already linked
+in for the OTA client, so `mqtts://` really is close to free. The 99 % is upstream's
+baseline on this core, not something this fork introduced.
 
-- `ci.yaml` pins esp32 core **2.0.10** while `release.yaml` pins **2.0.17**. The release
-  build can therefore come out a little different — read the size line there too before
-  publishing.
-- Do not judge the budget by the size of a published `.bin` asset. The v2.4.6 release
-  artifact is 1,305,536 bytes, which suggests almost no headroom; the compiler's own
-  `Sketch uses ...` line is the number that counts.
-
-If a future change ever does overflow, the fix is not to shrink the code but to rebalance
-the partitions: LittleFS gets 1.44 MB while `data/` only needs 442 KB, so several hundred
+**But 11 KB is tight.** Read the `Sketch uses ... bytes` line in the release log after every
+change. If a future change overflows, the fix is not to shrink the code but to rebalance the
+partitions: LittleFS gets 1.44 MB while `data/` only needs 442 KB, so several hundred
 kilobytes can move to the app partitions with a custom partition table. That changes the
 flash layout and therefore requires one flash over USB rather than an OTA step.
+
+Do not judge the budget by the size of a published `.bin` asset either way — the compiler's
+own line is the number that counts.
