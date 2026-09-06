@@ -1,6 +1,11 @@
 > **This is a fork.** Based on `eb75868`, upstream's last commit (19 August 2024).
 > It adds MQTT over TLS (`mqtts://`), fixes Home Assistant discovery on HA 2026.9.0,
-> and points the OTA update check at this repository. See **[FORK.md](FORK.md)**.
+> puts the controller id into the discovery topics, and points the OTA update check at
+> this repository.
+>
+> - **[FORK.md](FORK.md)** — what changed and why (English)
+> - **[ANLEITUNG.md](ANLEITUNG.md)** — Einrichtung im fremden Haushalt mit Google Home
+> - **[WISSEN.md](WISSEN.md)** — gesammelte Befunde zur Firmware und zum Aufbau
 
 # ESPSomfy-RTS <image src="https://user-images.githubusercontent.com/47839015/218898940-3541b360-5c49-4e38-a918-392cd0408b76.png" align="right" style="width:177px;display:inline-block;float:right"></image>
 
