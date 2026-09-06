@@ -4,6 +4,12 @@ on:
   release:
     types: [published]
 
+# Release-Assets anzuhaengen braucht contents: write.  Der Standard fuer den
+# GITHUB_TOKEN ist inzwischen nur noch read, weshalb der littlefs-Job -- der als
+# einziger keine eigenen permissions deklarierte -- mit HTTP 403 abbrach.
+permissions:
+  contents: write
+
 env:
   ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: "https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json"
   ARDUINO_CLI_VERSION: "0.x"

@@ -277,6 +277,13 @@ Offset `0x290000`.
   gh api repos/OWNER/REPO/actions/jobs/<id>/logs --allow-escape-sequences \
     | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | grep -i "sketch uses"
   ```
+- **`release.yaml` brauchte `permissions: contents: write`.** Der Standard für den
+  `GITHUB_TOKEN` ist inzwischen nur noch `read`; das Anhängen der Release-Dateien scheiterte
+  mit `unexpected status code: 403`. Upstream deklarierte Rechte nur im `arduino`-Job
+  (`write-all`), nicht im `littlefs`-Job. Jetzt auf Workflow-Ebene gesetzt.
+- **Ein `release`-Ereignis lässt sich nicht mit `gh run rerun` wiederholen** — der Lauf
+  benutzt die alte Fassung der Workflow-Datei. Nach einer Korrektur muss das Release
+  gelöscht und neu angelegt werden, damit `release: published` erneut auslöst.
 - **Lokal bauen scheidet hier aus:** installiert war esp32-Core 3.0.7, gepinnt ist 2.0.x —
   3.x ist für diesen Code ein Breaking Change.
 
