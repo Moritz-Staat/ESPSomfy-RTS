@@ -149,26 +149,27 @@ SmartRC-CC1101-Driver-Lib 2.5.7, WebSockets 2.4.0.
 
 ### Flash budget
 
-Two builds, two numbers. **The release build is the one that matters** — that is what gets
-flashed. `ci.yaml` pins esp32 core 2.0.10, `release.yaml` pins 2.0.17, and the difference is
-substantial: on the classic ESP32 the newer core costs another 43 KB.
+App partition (`default` scheme) is 0x140000 = **1,310,720 bytes**. Measured on release
+**v2.4.9**, run `34040077330`, esp32 core 2.0.17:
 
-App partition (`default` scheme) is 0x140000 = **1,310,720 bytes**.
-
-| Board | Release build (core 2.0.17) | | CI build (core 2.0.10) |
+| Board | Sketch | Used | Free |
 |---|---:|---:|---:|
-| **ESP32** | 1,299,429 B — **99 %**, ~11 KB free | | 1,256,409 B — 95 % |
-| ESP32-C3 | 1,216,946 B — 92 %, ~92 KB free | | 1,191,098 B — 90 % |
-| ESP32-S2 | 1,184,326 B — 90 %, ~124 KB free | | 1,163,978 B — 88 % |
-| ESP32-S3 | 1,175,649 B — 89 %, ~132 KB free | | 1,172,609 B — 89 % |
+| **ESP32** (tightest target) | 1,299,545 B | **99 %** | ~11 KB |
+| ESP32-C3 | 1,217,122 B | 92 % | ~91 KB |
+| ESP32-S2 | 1,184,430 B | 90 % | ~123 KB |
+| ESP32-S3 | 1,175,757 B | 89 % | ~132 KB |
 
-Static RAM on the ESP32 release build: globals 95,096 bytes (29 %), leaving 232,584 bytes
-for local variables and the heap. A TLS session holds roughly 20–35 KB of that while open.
+**The release build is the one that matters** — that is what gets flashed. `ci.yaml` pins
+core 2.0.10 and comes out about **43 KB smaller** on the classic ESP32, so treat the CI
+number as proof that it compiles, not as a budget.
 
-**What this patch costs:** the v2.4.8 `esp32.bin` asset is 1,306,000 bytes against upstream
-v2.4.6's 1,305,536 — a difference of about **464 bytes**. The TLS stack was already linked
-in for the OTA client, so `mqtts://` really is close to free. The 99 % is upstream's
-baseline on this core, not something this fork introduced.
+Static RAM on the ESP32: globals 95,096 bytes (29 %), leaving 232,584 bytes for local
+variables and the heap. A TLS session holds roughly 20–35 KB of that while open.
+
+**What these changes cost:** the v2.4.9 `esp32.bin` asset is 1,306,128 bytes against
+upstream v2.4.6's 1,305,536 — about **590 bytes** for all four patches. The TLS stack was
+already linked in for the OTA client, so `mqtts://` really is close to free. The 99 % is
+upstream's baseline on this core, not something this fork introduced.
 
 **But 11 KB is tight.** Read the `Sketch uses ... bytes` line in the release log after every
 change. If a future change overflows, the fix is not to shrink the code but to rebalance the
