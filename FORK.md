@@ -110,14 +110,32 @@ every push, and `release.yaml` builds the flashable images when a release is pub
 Pinned by the workflow: esp32 core 2.0.17, ArduinoJson 6.21.5, PubSubClient 2.8.0,
 SmartRC-CC1101-Driver-Lib 2.5.7, WebSockets 2.4.0.
 
-### Watch the flash budget
+### Flash budget
 
-The `default` partition scheme gives the app **0x140000 = 1,310,720 bytes**, and upstream's
-v2.4.6 build already used 1,305,536 of them. That is **about 5 KB of headroom**, so read
-the `Sketch uses ... bytes (xx%) of program storage space` line in the CI log after every
-change.
+The `default` partition scheme gives the app **0x140000 = 1,310,720 bytes**. Measured on
+this branch (run 34038430510, esp32 core 2.0.10 as pinned by `ci.yaml`):
 
-If it overflows, the fix is not to shrink the code but to rebalance the partitions: the
-LittleFS partition is 1.44 MB while `data/` only needs 442 KB, so several hundred kilobytes
-can move to the app partitions with a custom partition table. That changes the flash layout
-and therefore requires one flash over USB rather than an OTA step.
+| Board | Sketch | Used | Free |
+|---|---:|---:|---:|
+| ESP32 | 1,256,409 B | **95 %** | ~53 KB |
+| ESP32-C3 | 1,191,098 B | 90 % | ~117 KB |
+| ESP32-S3 | 1,172,609 B | 89 % | ~135 KB |
+| ESP32-S2 | 1,163,978 B | 88 % | ~143 KB |
+
+Static RAM on the ESP32: global variables take 93,936 bytes (28 %), leaving 233,744 bytes
+for local variables and the heap. A TLS session holds roughly 20–35 KB of that for as long
+as it is open.
+
+So there is room, and no partition surgery is needed. Two caveats worth keeping in mind:
+
+- `ci.yaml` pins esp32 core **2.0.10** while `release.yaml` pins **2.0.17**. The release
+  build can therefore come out a little different — read the size line there too before
+  publishing.
+- Do not judge the budget by the size of a published `.bin` asset. The v2.4.6 release
+  artifact is 1,305,536 bytes, which suggests almost no headroom; the compiler's own
+  `Sketch uses ...` line is the number that counts.
+
+If a future change ever does overflow, the fix is not to shrink the code but to rebalance
+the partitions: LittleFS gets 1.44 MB while `data/` only needs 442 KB, so several hundred
+kilobytes can move to the app partitions with a custom partition table. That changes the
+flash layout and therefore requires one flash over USB rather than an OTA step.
