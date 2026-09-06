@@ -283,9 +283,12 @@ Offset `0x290000`.
 ### Release-Konvention dieses Forks
 
 Der Tag muss zu `FW_VERSION` in `ConfigSettings.h` passen, weil `GitOTA` die Download-URL
-aus `settings.fwVersion.name` baut. Aktuell `v2.4.7`. Eine Version, die Upstream nie
-veröffentlicht hat — jedes Gerät, das v2.4.7 meldet und auf diesen Fork zeigt, ist also ein
-Build von hier. Für den nächsten Patch beides gemeinsam hochziehen.
+aus `settings.fwVersion.name` baut. Aktuell **`v2.4.8`**. Für den nächsten Patch beides
+gemeinsam hochziehen.
+
+Nicht `v2.4.7` nehmen: Upstream hat diese Version als **Vorabversion** veröffentlicht
+(19. August 2024), gleicher Name bei anderem Inhalt wäre also verwirrend. `v2.4.8` liegt
+über allem, was Upstream hat, und ist damit eindeutig.
 
 `appver_t` parst Ziffern vor den Punkten in `major`/`minor`/`build` und hat ein
 `suffix[4]`; `name` ist `char[15]`, die Version darf also höchstens 14 Zeichen haben.
