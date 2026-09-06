@@ -1604,6 +1604,16 @@ void SomfyShade::unpublishDisco() {
   else
     snprintf(topic, sizeof(topic), "%s/switch/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, this->shadeId);
   mqtt.unpublish(topic);
+  // Bis v2.4.7 stand die Controller-Kennung nicht im Pfad.  Eine dort liegengebliebene
+  // retained Nachricht erzeugt in Home Assistant ein zweites, totes Geraet.  Beim
+  // ausdruecklichen Abmelden ist der richtige Zeitpunkt, sie mitzunehmen -- beim Start
+  // waere es falsch, weil am selben Broker noch ein Controller auf dem alten Build
+  // haengen koennte, dessen aktive Konfiguration man damit wegwischt.
+  if(this->shadeType != shade_types::drycontact && this->shadeType != shade_types::drycontact2)
+    snprintf(topic, sizeof(topic), "%s/cover/%d/config", settings.MQTT.discoTopic, this->shadeId);
+  else
+    snprintf(topic, sizeof(topic), "%s/switch/%d/config", settings.MQTT.discoTopic, this->shadeId);
+  mqtt.unpublish(topic);
 }
 void SomfyShade::publish() {
   if(mqtt.connected()) {
@@ -1673,6 +1683,11 @@ void SomfyShade::unpublish(uint8_t id) {
       snprintf(topic, sizeof(topic), "%s/cover/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, id);
       mqtt.unpublish(topic);
       snprintf(topic, sizeof(topic), "%s/switch/%s/%d/config", settings.MQTT.discoTopic, settings.serverId, id);
+      mqtt.unpublish(topic);
+      // Dazu die Pfade vor v2.4.8, die noch keine Controller-Kennung trugen.
+      snprintf(topic, sizeof(topic), "%s/cover/%d/config", settings.MQTT.discoTopic, id);
+      mqtt.unpublish(topic);
+      snprintf(topic, sizeof(topic), "%s/switch/%d/config", settings.MQTT.discoTopic, id);
       mqtt.unpublish(topic);
     }
   }

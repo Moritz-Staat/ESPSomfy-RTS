@@ -396,7 +396,7 @@
                             </div>
                         </div>
                         <div class="field-group1" style="white-space:nowrap;">
-                            <select name="mqtt-protocol" data-bind="mqtt.protocol" style="width:54px;">
+                            <select name="mqtt-protocol" data-bind="mqtt.protocol" style="width:54px;" onchange="var p=this.parentNode.querySelector('input[name=mqtt-port]'); if(p) { if(this.value.toUpperCase().indexOf('MQTTS') === 0) { if(p.value === '' || p.value === '1883') p.value = '8883'; } else if(p.value === '8883') p.value = '1883'; }">
                                 <option>MQTT</option>
                                 <option>MQTTS</option>
                             </select>
