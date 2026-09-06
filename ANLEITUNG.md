@@ -43,8 +43,8 @@ muss ein Port geöffnet werden. Das ist der Grund, warum bei ihr nichts stehen m
 | Google-Cloud-Projekt | ihr oder dein Google-Konto | 0 € |
 | Ein Google-Lautsprecher oder -Display | bei ihr | hat sie |
 
-**Nicht** nötig: ein Matter-Hub, ein Nabu-Casa-Abo, ein Raspberry Pi bei ihr, eine
-iOS-App, eine offene Portweiterleitung.
+**Nicht** nötig: zusätzliche Hardware in ihrem Haushalt, eine offene Portweiterleitung —
+weder bei ihr noch bei dir — und keine App, die installiert werden müsste.
 
 ---
 
@@ -134,9 +134,12 @@ Im Web-UI Räume anlegen und zuordnen. Erspart Handarbeit in Google Home.
 
 ## Schritt 4 — MQTT auf TLS umschalten
 
-Das Web-UI hat **keinen** Protokoll-Schalter, der Wert kommt nur über die API. `PUT
-/connectmqtt` auf **Port 80** speichert und verbindet sofort neu; fehlende Felder behalten
-ihren Wert, weil die Firmware jeden Schlüssel einzeln prüft.
+Im Web-UI steht die Auswahl **MQTT / MQTTS** direkt neben dem Hostfeld; beim Umschalten
+schlägt sie den passenden Port vor. Damit, Zugangsdaten und Wurzelthema eintragen,
+speichern — fertig.
+
+Wer es geskriptet mag: `PUT /connectmqtt` auf **Port 80** speichert und verbindet sofort
+neu. Fehlende Felder behalten ihren Wert, weil die Firmware jeden Schlüssel einzeln prüft.
 
 ```bash
 curl -X PUT http://<ip>/connectmqtt \

@@ -6,6 +6,9 @@
 > - **[FORK.md](FORK.md)** — what changed and why (English)
 > - **[ANLEITUNG.md](ANLEITUNG.md)** — Einrichtung im fremden Haushalt mit Google Home
 > - **[WISSEN.md](WISSEN.md)** — gesammelte Befunde zur Firmware und zum Aufbau
+>
+> Current release: **[v2.4.9](../../releases/latest)**. Open points are tracked in
+> [Issues](../../issues).
 
 # ESPSomfy-RTS <image src="https://user-images.githubusercontent.com/47839015/218898940-3541b360-5c49-4e38-a918-392cd0408b76.png" align="right" style="width:177px;display:inline-block;float:right"></image>
 

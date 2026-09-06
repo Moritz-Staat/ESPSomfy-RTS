@@ -1,52 +1,52 @@
 # Wissensstand
 
-Alles, was bei der Arbeit an diesem Fork herausgekommen ist: warum er existiert, wie das
-Ganze jetzt funktioniert, welche Befunde am Quelltext verifiziert sind und welche Wege
-begründet verworfen wurden.
+Was dieser Fork löst, wie der Aufbau funktioniert und welche Eigenheiten der Firmware dabei
+zu beachten sind. Alle Befunde sind am Quelltext oder am laufenden Gerät geprüft, mit
+Fundstellen.
 
-**Stand:** 6. September 2026 · Basis `eb75868` (Upstream-HEAD vom 19. August 2024)
+**Stand:** 6. September 2026 · Fork-Basis `eb75868` · Release `v2.4.9`
 
 ---
 
-## 1. Ausgangslage
+## 1. Die Aufgabe und die Randbedingungen
 
-Es gibt zwei ESPSomfy-Controller.
+Es gibt zwei ESPSomfy-Controller in zwei Haushalten.
 
 | | Haushalt A | Haushalt B |
 |---|---|---|
-| Gerät | ESP32 + CC1101 | ESP32 + CC1101, dort aufgestellt |
 | Bedienung | Android-App aus `Moritz-Staat/ESPSomfy`, dazu Home Assistant | iPhone, Google Home, **kein** Home Assistant |
-| Zustand | läuft | war ohne Lösung |
+| Aufgabe | läuft | Rollos per Sprache über Google Home, **ohne zusätzliche Hardware dort** |
 
-Die Aufgabe: Haushalt B soll die Rollos per Sprache über Google Home bedienen können. Die
-Android-App fällt weg (iPhone), Home Assistant gibt es dort nicht, und es sollte **keine
-zusätzliche Hardware** dorthin.
+### Drei Wände, die den Aufbau bestimmen
 
-### Warum das schwerer ist, als es klingt
-
-Der Controller war ein Gerät, das man **besuchen** muss. Drei unabhängige Gründe, alle im
-Quelltext geprüft:
+Der Controller war ein Gerät, das man **besuchen** muss. Drei unabhängige Gründe:
 
 1. **Die HTTP-API sendet keine CORS-Header.** `Web::sendCORSHeaders()` ist eine leere Hülle
    — alle sechs `sendHeader`-Zeilen sind auskommentiert (`Web.cpp:52-59`) — und wird
    trotzdem an **63** Stellen aufgerufen. Eine Webseite von einem fremden Ursprung darf die
    Antworten des Geräts deshalb nicht lesen, und ein `PUT` mit `application/json` verlangt
-   einen Preflight, den das Gerät mit HTTP 200 aber **ohne** Header beantwortet. Genau
-   deshalb funktioniert nur das mitgelieferte Web-UI: es kommt vom Gerät selbst, ist also
-   same-origin.
+   einen Preflight, den das Gerät mit HTTP 200 aber **ohne** Header beantwortet. Nur das
+   mitgelieferte Web-UI funktioniert, weil es vom Gerät selbst kommt und damit same-origin
+   ist.
 2. **Mixed Content.** Eine über HTTPS geladene Seite darf nichts von `http://192.168.x.x`
    holen, auch kein `ws://`. Eine gehostete Web-App scheitert also selbst dann, wenn man
    Wand 1 beseitigt.
-3. **Der MQTT-Client konnte kein TLS.** `WiFiClient tcpClient;` (`MQTT.cpp:11`) — kein
-   `WiFiClientSecure`, kein Zertifikat. Ein Broker außerhalb des LAN hätte bedeutet,
-   Zugangsdaten im Klartext durchs Internet zu schicken.
+3. **Der MQTT-Client konnte kein TLS.** `WiFiClient tcpClient;` — kein `WiFiClientSecure`,
+   kein Zertifikat. Ein Broker außerhalb des LAN hätte bedeutet, Zugangsdaten im Klartext
+   durchs Internet zu schicken.
 
-**Wand 3 ist die einzige, die sich in der Firmware wegnehmen lässt.** Das ist der ganze
-Inhalt dieses Forks.
+**Wand 3 ist die einzige, die sich in der Firmware wegnehmen lässt** — und genau das ist der
+Inhalt dieses Forks. Wand 1 und 2 bleiben; deshalb redet kein Browser-Client von außen
+direkt mit dem Gerät.
+
+Dazu eine vierte Randbedingung, die nicht im Gerät steckt: **ein Cloudflare-Tunnel kann MQTT
+nicht tragen.** Das ist rohes TCP, kein HTTP. Ein selbst betriebener Broker bräuchte eine
+echte Portweiterleitung; ein gehosteter Broker verlangt nirgends einen offenen Port, weil
+beide Seiten ausgehend wählen.
 
 ---
 
-## 2. Wie es jetzt funktioniert
+## 2. Wie der Aufbau funktioniert
 
 ```
    ihr Haushalt                Internet                  dein Server
@@ -62,26 +62,28 @@ Inhalt dieses Forks.
                                             „Hey Google, oeffne die Rollos"
 ```
 
-Der Trick: **beide Seiten verbinden sich ausgehend** und treffen sich beim Broker. Damit
-muss nirgends ein Port geöffnet werden — und das ist der Grund, warum bei ihr keine Kiste
-mehr stehen muss.
+**Beide Seiten verbinden sich ausgehend** und treffen sich beim Broker. Deshalb muss nirgends
+ein Port geöffnet werden, und deshalb steht in ihrem Haushalt keine zusätzliche Kiste.
 
 ### Die Teile und ihre Rollen
 
 | Teil | Rolle | Für wen |
 |---|---|---|
-| **ESP-Firmware** | funkt Somfy, rechnet Positionen, **neu:** meldet sich verschlüsselt am Broker an | beide Geräte |
+| **ESP-Firmware** | funkt Somfy, rechnet Positionen, meldet sich verschlüsselt am Broker an | beide Geräte |
 | **MQTT-Broker** | Briefkasten in der Mitte, gehostet, kostenlos | beide Seiten |
 | **Home Assistant** | **nur Übersetzer** nach Google. Eigene Instanz je Haushalt, damit ihr Login nicht deine Wohnung sieht | für sie |
 | **Android-App** | direkter Draht im eigenen WLAN, kein MQTT | für dich |
-| **Web-App** | optional, dieselbe Codebasis, von deinem Server ausgeliefert | für sie, falls Google Home nicht genügt |
 
-### Warum die Android-App nicht ihre App ist
+Die Android-App spricht ausschließlich die HTTP- und WebSocket-Schnittstelle eines Geräts
+**im selben WLAN** an. Sie hat keinen MQTT-Teil und kann den Broker nicht benutzen.
 
-Sie spricht ausschließlich die HTTP- und WebSocket-Schnittstelle eines Geräts **im selben
-WLAN** an und hat keinen MQTT-Teil. Deshalb war die iOS-Portierung für ihren Fall von
-Anfang an der falsche Hebel: sie hätte ihr Problem nicht gelöst. Der Plan dafür existiert
-(`PLAN-IOS.md` im Projektordner) und bleibt als Option liegen.
+### Warum eine eigene HA-Instanz je Haushalt
+
+Nicht aus technischen Gründen, sondern wegen des Zugriffs: für die Google-Verknüpfung muss
+sie sich einmal an dieser HA-Instanz anmelden, und Home Assistant kennt keine belastbare
+Rechtetrennung je Entität — mit einem Konto in deiner Instanz könnte sie über die API deine
+Wohnung steuern. Eine eigene Instanz löst das sauber. Details in
+[ANLEITUNG.md](ANLEITUNG.md).
 
 ### Ausfallverhalten
 
@@ -92,8 +94,8 @@ Anfang an der falsche Hebel: sie hätte ihr Problem nicht gelöst. Der Plan daf�
 | ihr Internet | weg | gehen |
 | ihr WLAN oder Strom | weg | Handsender geht immer |
 
-Der Preis dafür, dass bei ihr nichts steht: **du bist ihre Infrastruktur.** Die Rollos
-selbst bleiben immer bedienbar, es fällt nur der Komfort aus.
+Der Preis dafür, dass bei ihr nichts steht: **du bist ihre Infrastruktur.** Die Rollos selbst
+bleiben immer bedienbar, es fällt nur der Komfort aus.
 
 ---
 
@@ -105,29 +107,28 @@ Vier Änderungen, Begründung und Details in [FORK.md](FORK.md).
    angelegt wird. Der Handshake ist aus dem Task-Watchdog ausgeklammert. `publishBuffer`
    schreibt in 512er statt 128er Häppchen.
 2. **`via_device` entfernt** — war mit derselben Kennung wie das Gerät selbst belegt, was
-   Home Assistant 2026.9.0 ablehnt.
+   Home Assistant 2026.9.0 ablehnt („A device can not be its own via device", Upstream-Issue
+   #684). Ohne den Fix erscheinen die Rollos gar nicht.
 3. **Discovery-Topics tragen die `serverId`** — sonst überschreiben sich zwei Controller am
    selben Broker gegenseitig.
 4. **OTA zeigt auf diesen Fork** — sonst ließe sich ein Gerät zum Downgrade überreden.
 
-### Zwei Vorarbeiten, die schon im Quelltext lagen
+### Zwei Vorarbeiten lagen schon im Quelltext
 
-Das ist der Grund, warum der Patch so klein ausfiel:
+Das ist der Grund, warum der Patch so klein ausfiel — rund **464 Byte** im Binärabbild:
 
 - **`WiFiClientSecure` war längst eingebunden.** `GitOTA.cpp` nutzt es an drei Stellen mit
-  `setInsecure()` (`GitOTA.cpp:2,94,354,475`), um Releases von GitHub zu holen. TLS läuft
-  auf diesem Gerät also nachweislich; der Patch fügt Aufrufstellen hinzu, nicht den Stack.
-  **Deshalb kostet TLS praktisch kein Flash.**
+  `setInsecure()` (`GitOTA.cpp:2,94,354,475`), um Releases von GitHub zu holen. TLS läuft auf
+  diesem Gerät also nachweislich; der Patch fügt Aufrufstellen hinzu, nicht den Stack.
 - **Das Konfigurationsfeld existierte und wurde nie ausgewertet.**
-  `char protocol[10] = "mqtt://"` (`ConfigSettings.h:156`), und `connect()` prüfte es nur
-  auf Länge (`MQTT.cpp:200`). Zehn Bytes fassen `"mqtts://"`. Der Anschluss war
-  vorbereitet und lag brach.
+  `char protocol[10] = "mqtt://"` (`ConfigSettings.h:156`), und `connect()` prüfte es nur auf
+  Länge (`MQTT.cpp:200`). Sogar **die Auswahl im Web-UI war da** — ein `<select>` mit
+  `MQTT` / `MQTTS` neben dem Hostfeld, ohne Abnehmer im Code. Weil der Vergleich
+  groß-klein-unabhängig ist, greift der Wert `MQTTS` aus der Oberfläche direkt.
 
 ---
 
 ## 4. Die Firmware von innen
-
-Alles hier ist am Quelltext oder am echten Gerät geprüft.
 
 ### Drei Ports, zwei Webserver
 
@@ -141,24 +142,23 @@ dazu einen WebSocket auf **8080**. Sie bedienen **unterschiedliche** Routen.
 | **8080** | WebSocket, zusätzlich als mDNS-Dienst `_espsomfy_rts._tcp` beworben (`Network.cpp:353-356`) mit TXT-Feldern `serverId`, `model`, `version` |
 
 Verwaltungsrouten sind auf 8081 **nicht** registriert — ein `PUT` dorthin läuft ins Leere.
+`/mqttsettings` ist **nur lesend**; gespeichert wird über `PUT /connectmqtt`.
 
-### `GET /discovery` ist der wichtigste Endpunkt
-
-Liefert in **einem** Request `serverId`, `version`, `latest`, `model`, `hostname`,
-`authType`, `permissions`, `chipModel`, `connType`, `memory{max,free,min,total}` und die
-vollständigen Arrays `rooms`, `shades`, `groups`.
+**`GET /discovery` ist der wichtigste Endpunkt.** Er liefert in einem Request `serverId`,
+`version`, `latest`, `model`, `hostname`, `authType`, `permissions`, `chipModel`, `connType`,
+`memory{max,free,min,total}` und die vollständigen Arrays `rooms`, `shades`, `groups`.
 
 ### WebSocket-Eigenheiten
 
-- Die Frames sind **kein gültiges JSON**: `42[shadeState,{"shadeId":1,…}]` — der
-  Event-Name steht **unquotiert** im Array. Ein normaler `JSON.parse` scheitert.
+- Die Frames sind **kein gültiges JSON**: `42[shadeState,{"shadeId":1,…}]` — der Event-Name
+  steht **unquotiert** im Array. Ein normaler `JSON.parse` scheitert.
 - Direkt nach dem Verbinden kommt der Klartext-String `Connected`, kein Frame.
 - **Kein Heartbeat.** Im Leerlauf kommen minutenlang keine Frames (60 s im Mitschnitt
   bestätigt). Ein Watchdog „keine Daten in 60 s ⇒ tot" reißt gesunde Verbindungen ab —
   stattdessen WebSocket-Protokoll-Pings nutzen, deren Pong RFC-Pflicht ist.
 - **Maximal 5 Clients.** Web-UI-Tabs, Handy-App und Bridges zählen alle mit.
-- `shadeType` heißt im Socket-Event `type`. Tilt-Felder fehlen dort bei `tiltType: 0` —
-  beim Zusammenführen nie auf `undefined` zurücksetzen.
+- `shadeType` heißt im Socket-Event `type`. Tilt-Felder fehlen dort bei `tiltType: 0` — beim
+  Zusammenführen nie auf `undefined` zurücksetzen.
 
 ### Die MQTT-Oberfläche
 
@@ -168,16 +168,26 @@ dazu `sunFlag`, `sunny`, `windy`. Auf Geräteebene `status` (LWT `online`/`offli
 `ipAddress`, `host`, `firmware`, `serverId`, `mac`.
 
 Abonniert (`MQTT.cpp:216-229`): `shades/+/target/set`, `direction/set`, `tiltTarget/set`,
-`mypos/set`, `myTiltPos/set`, `position/set`, `tiltPosition/set`, `sunFlag/set`,
-`sunny/set`, `windy/set` sowie `groups/+/direction/set`, `sunFlag/set`, `sunny/set`,
-`windy/set`.
+`mypos/set`, `myTiltPos/set`, `position/set`, `tiltPosition/set`, `sunFlag/set`, `sunny/set`,
+`windy/set` sowie `groups/+/direction/set`, `sunFlag/set`, `sunny/set`, `windy/set`.
 
-Damit ist die MQTT-Schnittstelle für Steuerung und Zustand **vollständig** — sie war der
+Damit ist die MQTT-Schnittstelle für Steuerung **und** Zustand vollständig — sie war der
 Grund, diesen Weg zu wählen statt einer neuen Protokollschicht.
 
 `setBufferSize` wird **nirgends** aufgerufen, der PubSubClient-Default liegt bei 256 Byte.
-Die Discovery-Nachrichten von bis zu 2 KB gehen trotzdem durch, weil `publishBuffer`
-mit `beginPublish` und gestückelten `write()`-Aufrufen streamt (`MQTT.cpp:329-345`).
+Die Discovery-Nachrichten von bis zu 2 KB gehen trotzdem durch, weil `publishBuffer` mit
+`beginPublish` und gestückelten `write()`-Aufrufen streamt (`MQTT.cpp:329-345`). Für
+empfangene Nachrichten ist die Grenze ohne Belang, die Befehlsnutzlasten sind Zahlen.
+
+### Discovery-Topics
+
+```
+<discoTopic>/cover/<serverId>/<shadeId>/config
+```
+
+Home Assistant erlaubt die node_id ausdrücklich:
+`<discovery_prefix>/<component>/[<node_id>/]<object_id>/config`, zulässige Zeichen
+`[a-zA-Z0-9_-]`. Die `serverId` ist sechsstelliger Hex und damit gültig.
 
 ### Die Positionsfalle — drei Konventionen, zwei Richtungen
 
@@ -209,7 +219,7 @@ Fahrtrichtung im MQTT-Vokabular: `1` schließt, `-1` öffnet, `0` steht.
 
 | Befund | Fundstelle |
 |---|---|
-| **`repeats = 0` lässt den ersten Befehl verpuffen.** `sendFrame` sendet dann genau einen Frame; der RTS-Empfänger tastet im Duty-Cycle ab, wird vom Weckimpuls geweckt, der Datenframe kommt aber zu früh. Symptom: „wirkt erst beim zweiten Mal". Fix: `repeats: 3` per `PUT /saveShade` auf **Port 80**. Der Code-Default in `clear()` wäre 1, gespeichert war trotzdem 0. | `Somfy.cpp:4011`, `Somfy.cpp:703` |
+| **`repeats = 0` lässt den ersten Befehl verpuffen.** `sendFrame` sendet dann genau einen Frame; der RTS-Empfänger tastet im Duty-Cycle ab, wird vom Weckimpuls geweckt, der Datenframe kommt aber zu früh. Symptom: „wirkt erst beim zweiten Mal". Fix: `repeats: 3` per `PUT /saveShade` auf **Port 80**. Der Code-Default in `clear()` wäre 1, gespeichert war trotzdem 0 — bei neu angelegten Rollos also immer prüfen. | `Somfy.cpp:4011`, `Somfy.cpp:703` |
 | **`Web::isAuthenticated()` wird an keiner Route aufgerufen** — deklariert und implementiert, aber tot. Alle Routen sind ohne `apikey` erreichbar, unabhängig von `authType`. Das Gerät gehört deshalb nie ins offene Internet. | `Web.h:43`, `Web.cpp:79` |
 | **Fehler kommen teils mit 2xx.** Bei falscher HTTP-Methode antworten Routen mit HTTP **201** und `{"status":"ERROR"}`. `/reboot` verlangt PUT oder POST; auf GET kommt 201 und das Gerät startet nicht neu. Clients müssen bei **jeder** Antwort das `status`-Feld prüfen. | |
 | **`myPos`/`myTiltPos` sind `-1`, nicht 255**, wenn kein Favorit gesetzt ist. Alles außerhalb 0–100 heißt „kein Favorit". | |
@@ -220,7 +230,8 @@ Fahrtrichtung im MQTT-Vokabular: `1` schließt, `-1` öffnet, `0` steht.
 | **Telemetrie ist ereignisgetrieben:** `wifiStrength` nur bei Änderung > 1 dBm, `memStatus` nur bei Sprüngen > 1500 Byte, spätestens alle 15 s. `strength: -100` mit leerer SSID heißt „keine Verbindung", nicht „sehr schwach". | |
 | **Namensgrenze `char[21]`** = 20 Zeichen, für Rollos, Räume und Gruppen. | |
 | **`linkToGroup` funkt keinen Prog-Befehl** und behandelt `shadeId 0` als „nicht angegeben". `deleteShade` antwortet mit HTTP 400, wenn das Rollo in einer Gruppe ist. | |
-| **Kein generischer Datei-Handler.** Jede ausgelieferte Datei ist eine fest verdrahtete Route (`Web.cpp:1094-1190`), unbekannte Pfade gehen in `onNotFound` → 404. Eine zusätzlich hochgeladene HTML-Datei würde also nie ausgeliefert — obwohl LittleFS Platz hätte (442 KB von 1408 KB belegt). | |
+| **Kein generischer Datei-Handler.** Jede ausgelieferte Datei ist eine fest verdrahtete Route (`Web.cpp:1094-1190`), unbekannte Pfade gehen in `onNotFound` → 404. Eine zusätzlich hochgeladene HTML-Datei würde nie ausgeliefert — obwohl LittleFS Platz hätte (442 von 1408 KB belegt). | |
+| **Das Web-UI ist bereits eine iOS-Web-App.** `data/index.html` enthält `apple-mobile-web-app-capable`, `apple-mobile-web-app-title` und sieben `apple-touch-icon`-Größen. „Zum Home-Bildschirm" liefert also ein Icon ohne Browserleisten — iOS-Safari erlaubt das auch über einfaches HTTP, anders als Chrome. | |
 
 ---
 
@@ -244,158 +255,102 @@ dauerhaft rund 20–35 KB.
 
 **Was der Patch kostet:** das `esp32.bin` von v2.4.8 ist 1.306.000 Byte groß, das von
 Upstream v2.4.6 war 1.305.536 — Unterschied rund **464 Byte**. Der TLS-Stack war über den
-OTA-Client schon eingebunden, `mqtts://` ist also tatsächlich fast gratis. Die 99 % sind
-Upstreams Ausgangslage auf diesem Core, nicht das Ergebnis dieses Forks.
+OTA-Client schon eingebunden, `mqtts://` ist also fast gratis. Die 99 % sind Upstreams
+Ausgangslage auf diesem Core.
 
-**11 KB sind aber knapp.** Nach jeder Änderung die Größenzeile im **Release**-Log lesen. Läuft
-es künftig über, ist die Antwort nicht Code kürzen, sondern Partitionen umverteilen: LittleFS
-hat 1,44 MB, `data/` braucht nur 442 KB. Das ändert das Flash-Layout und verlangt dann einmal
-USB statt OTA.
+**11 KB sind aber knapp.** Nach jeder Änderung die Größenzeile im **Release**-Log lesen.
+Läuft es künftig über, ist die Antwort nicht Code kürzen, sondern Partitionen umverteilen:
+LittleFS hat 1,44 MB, `data/` braucht nur 442 KB. Das ändert das Flash-Layout und verlangt
+dann einmal USB statt OTA.
 
-> **Korrektur eines eigenen Fehlers.** Zwischenzeitlich war hier von „rund 5 KB Luft" die
-> Rede. Diese Zahl war aus der **Dateigröße** des veröffentlichten v2.4.6-Binaries
-> abgeleitet (1.305.536 Byte). Die Dateigröße eines Release-Assets ist **kein** Maß für den
-> Sketch. Maßgeblich ist allein die Compiler-Zeile `Sketch uses … bytes (xx%)`.
-
-Zu beachten: `ci.yaml` pinnt Core **2.0.10**, `release.yaml` aber **2.0.17**. Der
-Release-Build kann also etwas anders ausfallen — die Größenzeile dort ebenfalls lesen.
+Die Dateigröße eines veröffentlichten `.bin`-Assets ist übrigens **kein** Maß für den Sketch
+— maßgeblich ist allein die Compiler-Zeile `Sketch uses … bytes (xx%)`.
 
 ---
 
 ## 6. Build, CI und Release
 
-Kein lokaler Werkzeugkasten nötig. `ci.yaml` kompiliert bei **jedem Push** alle vier
-Boards, `release.yaml` baut die flashbaren Bilder beim Veröffentlichen eines Releases.
+Kein lokaler Werkzeugkasten nötig. `ci.yaml` kompiliert bei **jedem Push** alle vier Boards,
+`release.yaml` baut die flashbaren Bilder beim Veröffentlichen eines Releases.
 
 Gepinnt von `release.yaml`: esp32-Core 2.0.17, ArduinoJson 6.21.5, PubSubClient 2.8.0,
-SmartRC-CC1101-Driver-Lib 2.5.7, WebSockets 2.4.0, LittleFS-Image 1.441.792 Byte bei
-Offset `0x290000`.
+SmartRC-CC1101-Driver-Lib 2.5.7, WebSockets 2.4.0, LittleFS-Image 1.441.792 Byte bei Offset
+`0x290000`.
 
-### Stolpersteine, die Zeit gekostet haben
+### Eigenheiten, die Zeit kosten
 
 - **Actions sind bei Forks gesperrt.** Bis zum einmaligen Freischalten in der Actions-Ansicht
-  listet `gh api repos/…/actions/workflows` **nichts** und kein Lauf startet.
+  listet `gh api repos/…/actions/workflows` nichts und kein Lauf startet. **Issues sind bei
+  Forks ebenfalls aus** — einschalten mit
+  `gh api -X PATCH repos/OWNER/REPO -F has_issues=true`.
 - **Freischalten löst keinen Lauf für bereits gepushte Commits aus.** Es braucht einen neuen
   Push.
-- **`actions/upload-artifact@v3` wird von GitHub automatisch abgewiesen.** Der Lauf scheitert
-  in „Set up job", bevor irgendein Code angefasst wird. `ci.yaml` hing upstream noch auf v3,
-  `release.yaml` war schon auf v4. Behoben.
+- **`actions/upload-artifact@v3` wird automatisch abgewiesen.** Der Lauf scheitert in
+  „Set up job", bevor Code angefasst wird. `ci.yaml` hing upstream noch auf v3.
+- **`release.yaml` braucht `permissions: contents: write`.** Der Standard für den
+  `GITHUB_TOKEN` ist nur noch `read`; das Anhängen der Release-Dateien scheiterte mit
+  `unexpected status code: 403`. Upstream deklarierte Rechte allein im `arduino`-Job.
+- **Ein `release`-Ereignis lässt sich nicht mit `gh run rerun` wiederholen** — der Lauf
+  benutzt die alte Fassung der Workflow-Datei. Nach einer Korrektur Release **und** Tag
+  löschen (`gh release delete --cleanup-tag`) und neu anlegen.
 - **`gh run list` zeigte die Läufe des Forks nicht**, die REST-API unter
   `repos/…/actions/runs` schon.
-- **Job-Logs brauchen `--allow-escape-sequences`**, sonst gibt `gh api` nur eine
-  Fehlermeldung zurück:
+- **Job-Logs brauchen `--allow-escape-sequences`**, sonst gibt `gh api` nur eine Fehlermeldung
+  zurück:
   ```bash
   gh api repos/OWNER/REPO/actions/jobs/<id>/logs --allow-escape-sequences \
     | sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' | grep -i "sketch uses"
   ```
-- **`release.yaml` brauchte `permissions: contents: write`.** Der Standard für den
-  `GITHUB_TOKEN` ist inzwischen nur noch `read`; das Anhängen der Release-Dateien scheiterte
-  mit `unexpected status code: 403`. Upstream deklarierte Rechte nur im `arduino`-Job
-  (`write-all`), nicht im `littlefs`-Job. Jetzt auf Workflow-Ebene gesetzt.
-- **Ein `release`-Ereignis lässt sich nicht mit `gh run rerun` wiederholen** — der Lauf
-  benutzt die alte Fassung der Workflow-Datei. Nach einer Korrektur muss das Release
-  gelöscht und neu angelegt werden, damit `release: published` erneut auslöst.
+- **Forks erben keine Releases und keine Tags.** `gh release list` ohne `-R` greift bei zwei
+  Remotes womöglich auf upstream.
 - **Lokal bauen scheidet hier aus:** installiert war esp32-Core 3.0.7, gepinnt ist 2.0.x —
   3.x ist für diesen Code ein Breaking Change.
 
-### Release-Konvention dieses Forks
+### Release-Konvention
 
-Der Tag muss zu `FW_VERSION` in `ConfigSettings.h` passen, weil `GitOTA` die Download-URL
-aus `settings.fwVersion.name` baut. Aktuell **`v2.4.8`**. Für den nächsten Patch beides
-gemeinsam hochziehen.
+Der Tag muss zu `FW_VERSION` in `ConfigSettings.h` passen, weil `GitOTA` die Download-URL aus
+`settings.fwVersion.name` baut. Aktuell **`v2.4.9`**. Für den nächsten Patch beides gemeinsam
+hochziehen.
 
 Nicht `v2.4.7` nehmen: Upstream hat diese Version als **Vorabversion** veröffentlicht
-(19. August 2024), gleicher Name bei anderem Inhalt wäre also verwirrend. `v2.4.8` liegt
-über allem, was Upstream hat, und ist damit eindeutig.
+(19. August 2024) — gleicher Name bei anderem Inhalt wäre verwirrend. Deshalb liefert die
+API bei Upstream auch v2.4.6 als „latest", sie überspringt Vorabversionen.
 
-`appver_t` parst Ziffern vor den Punkten in `major`/`minor`/`build` und hat ein
-`suffix[4]`; `name` ist `char[15]`, die Version darf also höchstens 14 Zeichen haben.
-
----
-
-## 7. Google Home — was gilt
-
-- **Fast jedes Google-Gerät ist ein Matter-Hub für WLAN-Geräte:** alle Nest- und
-  Google-Home-Lautsprecher (Nest Mini, Nest Audio, Google Home Mini, Google Home Speaker),
-  alle Nest-Displays, Nest Wifi Pro und der Google TV Streamer. Die oft zitierte engere
-  Liste — Nest Hub 2. Gen, Hub Max, Nest Wifi Pro, Google TV Streamer — betrifft **Thread**,
-  nicht Matter über WLAN. *(Eine frühere Fassung dieser Notizen hatte das zu streng
-  dargestellt.)*
-- **Matter Window Covering wird von Google Home voll unterstützt**, inklusive
-  Assistant-Sprachsteuerung; es erscheint als „Blinds".
-- **Cloud-to-Cloud:** Gerätetyp `action.devices.types.BLINDS`, Trait
-  `action.devices.traits.OpenClose` mit `openPercent` (**0 = zu, 100 = offen**),
-  `discreteOnlyOpenClose: false`, dazu `OpenCloseRelative` für „öffne 10 Prozent mehr".
-  Eingerichtet wird das in der **Google Home Developer Console**, nicht mehr in der alten
-  Actions-Konsole. Der Test-Modus reicht dauerhaft für den eigenen Haushalt.
-- **Kopplung von Matter-Bridges scheitert in Google Home auf Android**: die App überträgt
-  einen leeren Länder-Code, was die Matter-Spezifikation verbietet. Umweg: Erstkopplung mit
-  iPhone oder iPad. Als Fremdfehler geschlossen in Matterbridge-Issue #445. Betrifft diesen
-  Aufbau nicht mehr, weil er ohne Matter arbeitet.
+`appver_t` parst Ziffern vor den Punkten in `major`/`minor`/`build` und hat ein `suffix[4]`;
+`name` ist `char[15]`, die Version darf also höchstens 14 Zeichen haben.
 
 ---
 
-## 8. iOS — warum es hier keine eigene App gibt
+## 7. Google Home — was für diesen Aufbau gilt
 
-Ausführlich in `PLAN-IOS.md`. Die Kurzfassung:
+Die Anbindung läuft über die **Google-Assistant-Integration von Home Assistant**, also über
+Googles **Cloud-to-Cloud**-Schnittstelle. Eingerichtet wird sie in der **Google Home
+Developer Console**, nicht mehr in der alten Actions-Konsole; der Test-Modus reicht dauerhaft
+für den eigenen Haushalt.
 
-- **Es gibt keinen Weg, eine Datei aus dem Repo zu laden und mit einem Tap zu installieren.**
-  Jede Installation braucht eine Signatur — unsere oder die der Nutzerin.
-- **Kostenlos und dauerhaft geht nativ nicht:** eine freie Apple-ID gibt 7-Tage-Zertifikate,
-  maximal 3 sideloadete Apps und rund 10 App-IDs pro Woche, jederzeit widerrufbar. AltStore
-  erneuert nur mit einem PC im selben WLAN, SideStore nach einmaliger Kopplung auch am Gerät
-  allein.
-- **Normal anfühlen kostet 99 €/Jahr** (Apple Developer Program, dann TestFlight).
-- **Der Hauptblocker im Code wäre die lokale Netzwerkfreigabe** (iOS 14+): wird sie
-  verweigert, ist der Status nicht abfragbar und der Fehler sieht aus wie „Gerät nicht
-  erreichbar" (`NSURLErrorNotConnectedToInternet`). App Transport Security ist dagegen kein
-  Problem — Roh-IPs sind ausgenommen.
-- **Eine PWA hilft nicht**, solange sie fremd gehostet ist: Wand 1 und 2 aus Abschnitt 1.
-  *(Eine frühere Fassung des Plans schlug „nginx im LAN" vor — das war falsch, denn ein
-  zweiter Rechner im selben Netz ist trotzdem ein anderer Ursprung. Es müsste ein
-  Reverse-Proxy sein, der App und API unter **einem** Ursprung ausliefert.)*
-- **Interessant, aber ungenutzt:** das Web-UI der Firmware ist bereits als iOS-Web-App
-  vorbereitet — `data/index.html` enthält `apple-mobile-web-app-capable`,
-  `apple-mobile-web-app-title` und sieben `apple-touch-icon`-Größen. „Zum Home-Bildschirm"
-  liefert also heute schon ein Icon ohne Browserleisten. iOS-Safari erlaubt das **auch über
-  einfaches HTTP**, anders als Chrome.
+- Gerätetyp `action.devices.types.BLINDS`, Trait `action.devices.traits.OpenClose` mit
+  `openPercent` — **0 = zu, 100 = offen** —, `discreteOnlyOpenClose: false`, dazu
+  `OpenCloseRelative` für „öffne 10 Prozent mehr".
+- **`expose_by_default: false`** und `expose: true` je Entität. Nur so landet ausschließlich
+  das in ihrem Google-Konto, was ausdrücklich dafür bestimmt ist.
+- **`report_state: true`**, sonst fragt Google den Zustand nur auf Nachfrage ab und die
+  Kachel hinkt.
+- Räume und Spitznamen in Google Home entscheiden über die Sprachqualität: kurze Gerätenamen
+  ohne Raumangabe, der Raum kommt aus Google.
 
 ---
 
-## 9. Verworfene Wege, mit Begründung
+## 8. Offene Punkte
 
-| Weg | Warum verworfen |
-|---|---|
-| **Matter direkt in die Firmware** | Rechnet nicht auf: App 1,28 MB × 2 OTA-Partitionen + 1,44 MB LittleFS füllen einen 4-MB-ESP32 schon aus. esp-matter bringt 1,3–1,6 MB Code dazu. Nur auf ESP32-S3 mit 8/16 MB denkbar, dann als Fork mit gebrochener OTA-Kompatibilität. |
-| **Eigenes Matterbridge-Plugin** (`matterbridge-espsomfy-rts`) | Technisch der schönste Weg — 8–12 Tage Arbeit **und** ein Dauerläufer bei ihr. Der MQTT-Patch liefert dasselbe Ergebnis in 3–4 Tagen ohne Hardware dort. Bleibt als Idee: es existiert nichts dergleichen. |
-| **Home-Assistant-Kiste bei ihr** (Pi oder HA Green) | Null Zeilen eigener Code, aber 60–120 € Hardware in einem fremden Haushalt, den du dann fernwartest. Ausdrücklich nicht gewollt. |
-| **Broker auf dem eigenen Server statt gehostet** | Ein Cloudflare-Tunnel kann MQTT nicht tragen — rohes TCP, kein HTTP. Es bräuchte eine echte Portweiterleitung auf 8883. Ein gehosteter Broker verlangt nirgends einen offenen Port. |
-| **Web-App bei dir gehostet, die direkt mit ihrem Gerät redet** | Wand 1 (CORS) und Wand 2 (Mixed Content). Nicht von außen lösbar. |
-| **Ihr Login in deiner bestehenden HA-Instanz** | HA hat keine belastbare Rechtetrennung je Entität; sie könnte über die API deine Wohnung steuern. Deshalb eine eigene Instanz je Haushalt. |
-| **IFTTT** | Der Google-Assistant-Auslöser ist seit 31. August 2022 auf feste Phrasen beschnitten, und mit der Abschaltung der Conversational Actions am 13. Juni 2023 ist der Rest weggefallen. Prozentwerte gehen darüber nicht. |
-| **Automatisierungen / Skript-Editor in Google Home** | Können nur Geräte ansprechen, die schon in Google Home sind. Keine freien HTTP-Aufrufe. |
-| **Hue-Bridge-Emulation** | Google Home verlangt Kontoverknüpfung über Signify; eine lokal emulierte Bridge wird nicht mehr gefunden. |
-| **SmartThings als Zwischenschicht** | Möglich, tauscht aber nur eine Hub-Abhängigkeit gegen eine andere. |
-| **Zusätzliche HTML-Datei aufs Gerät legen** | Platz wäre da (442 von 1408 KB belegt), aber es gibt keinen generischen Datei-Handler; unbekannte Pfade laufen in einen 404. Ginge nur mit gepatchter Firmware und eigenem LittleFS-Image. |
+Geführt als [Issues im Repo](../../issues):
 
----
+| # | Punkt | Stand |
+|---|---|---|
+| [#1](../../issues/1) | Test am echten Gerät: TLS-Verbindung, Heap über 24 h | **offen** — die einzige echte Unbekannte |
+| [#2](../../issues/2) | Broker-Zertifikat wird nicht geprüft (`setInsecure`) | offen, mit Abwägung — entscheidet sich, sobald der Broker feststeht |
+| [#3](../../issues/3) | Alte Discovery-Konfigurationen nach dem Umstieg | erledigt, soweit sicher machbar |
+| [#4](../../issues/4) | Port beim Umschalten auf MQTTS vorschlagen | erledigt |
+| [#5](../../issues/5) | Patches nach upstream einreichen? | offen, Entscheidung des Eigners |
 
-## 10. Offene Punkte
-
-1. **Auf echter Hardware ungetestet.** Der Code kompiliert für alle vier Boards. Ob die
-   TLS-Verbindung dauerhaft hält, ob der Heap reicht und ob der Watchdog-Kniff greift, zeigt
-   erst ein Gerät am Broker. **Erst am eigenen Gerät testen, nicht an ihrem.**
-2. **Heap über 24 Stunden beobachten** — der Diagnose-Bildschirm der Handy-App oder das
-   Feld `memory` in `GET /discovery`.
-3. **Broker-Zertifikat wird nicht geprüft** (`setInsecure`). Ein `setCACert` mit der Wurzel
-   des Brokers wäre die Verbesserung; kostet ein Konfigurationsfeld von 1–2 KB.
-4. **Kein Protokoll-Schalter im Web-UI.** `mqtts://` lässt sich nur über
-   `PUT /connectmqtt` setzen. Eine Auswahl in `data/index.js` wäre nett, kostet aber nur
-   LittleFS-Platz — der ist frei.
-5. **Alte Discovery-Konfigurationen aufräumen**, wenn ein bestehendes Gerät auf diesen Build
-   umgestellt wird: die retained Nachricht am alten Topic bleibt liegen und erzeugt
-   Doppel-Entitäten.
-6. **Pull Request nach upstream?** Patch 2 behebt ein offenes Issue (#684), Patch 3 einen
-   echten Fehler, Patch 1 ist eine sauber begrenzte Erweiterung. Upstream ist seit August
-   2024 still, die Aussicht also gering — aber die Patches sind so geschrieben, dass sie
-   einreichbar bleiben. Patch 4 (OTA-URLs) gehört ausdrücklich **nicht** dazu.
+**Wichtigster Punkt bleibt #1.** Der Code kompiliert für alle vier Boards, ist aber auf keiner
+Hardware gelaufen. Erst am eigenen Gerät testen, nicht am ausgelieferten.

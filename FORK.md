@@ -27,9 +27,13 @@ Now `connect()` picks the transport from it: anything starting with `mqtts` gets
 
 ### Switching a device over
 
-There is no protocol selector in the web UI, but `PUT /connectmqtt` on **port 80** accepts
-a partial object — `fromJSON` checks each key with `containsKey`, so anything you leave out
-keeps its current value:
+The web UI already has the selector — `MQTT` / `MQTTS` next to the host field, which
+upstream shipped without a consumer. Because the comparison is case-insensitive, the value
+`MQTTS` it stores engages TLS directly. Since v2.4.8 the selector also proposes the
+matching port when you switch.
+
+For scripted setup, `PUT /connectmqtt` on **port 80** accepts a partial object — `fromJSON`
+checks each key with `containsKey`, so anything you leave out keeps its current value:
 
 ```bash
 curl -X PUT http://192.168.1.50/connectmqtt \
@@ -103,9 +107,14 @@ shades:
 homeassistant/cover/a1b2c3/1/config
 ```
 
-**Upgrading an existing installation leaves orphans.** The retained configuration at the
-old topic is not cleared by this build, because `unpublishDisco()` now writes to the new
-path. Clear it once by hand, then delete the leftover device in Home Assistant:
+**Upgrading an existing installation can leave orphans.** `unpublishDisco()` and the
+cleanup path for deleted shades clear the pre-v2.4.8 topic as well, so unpublishing or
+deleting a shade tidies up after itself. This does **not** happen at boot on purpose: if a
+second controller on the same broker still runs the old build, clearing that topic would
+wipe its live configuration.
+
+If a plain upgrade left a duplicate device behind, clear it once by hand and delete the
+leftover device in Home Assistant:
 
 ```bash
 mosquitto_pub -h <broker> -t 'homeassistant/cover/1/config' -r -n
