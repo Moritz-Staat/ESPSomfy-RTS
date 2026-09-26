@@ -101,7 +101,7 @@ bleiben immer bedienbar, es fällt nur der Komfort aus.
 
 ## 3. Was dieser Fork ändert
 
-Vier Änderungen, Begründung und Details in [FORK.md](FORK.md).
+Fünf Änderungen, Begründung und Details in [FORK.md](FORK.md).
 
 1. **MQTT über TLS** — `mqtts://` schaltet auf `WiFiClientSecure`, der erst bei Bedarf
    angelegt wird. Der Handshake ist aus dem Task-Watchdog ausgeklammert. `publishBuffer`
@@ -112,6 +112,10 @@ Vier Änderungen, Begründung und Details in [FORK.md](FORK.md).
 3. **Discovery-Topics tragen die `serverId`** — sonst überschreiben sich zwei Controller am
    selben Broker gegenseitig.
 4. **OTA zeigt auf diesen Fork** — sonst ließe sich ein Gerät zum Downgrade überreden.
+5. **Sortierreihenfolge wird gespeichert** — `/roomSortOrder`, `/shadeSortOrder` und
+   `/groupSortOrder` setzten `sortOrder` nur im RAM und antworteten sofort mit OK. Nach einem
+   Neustart war die Reihenfolge weg. Betrifft das mitgelieferte Web-UI genauso und hängt an
+   keiner Entscheidung dieses Forks — der naheliegendste Kandidat für upstream.
 
 ### Zwei Vorarbeiten lagen schon im Quelltext
 
@@ -352,6 +356,7 @@ Geführt als [Issues im Repo](../../issues):
 | [#3](../../issues/3) | Alte Discovery-Konfigurationen nach dem Umstieg | erledigt, soweit sicher machbar |
 | [#4](../../issues/4) | Port beim Umschalten auf MQTTS vorschlagen | erledigt |
 | [#5](../../issues/5) | Patches nach upstream einreichen? | offen, Entscheidung des Eigners |
+| [#67 der App](https://github.com/Moritz-Staat/ESPSomfy/issues/67) | Sortierreihenfolge übersteht keinen Neustart | Patch liegt hier, Prüfung am Gerät offen |
 
 **Wichtigster Punkt bleibt #1.** Der Code kompiliert für alle vier Boards, ist aber auf keiner
 Hardware gelaufen. Erst am eigenen Gerät testen, nicht am ausgelieferten.

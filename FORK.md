@@ -5,7 +5,7 @@ A fork of [rstrouse/ESPSomfy-RTS](https://github.com/rstrouse/ESPSomfy-RTS), bas
 to make one thing possible: **reaching a controller that sits in someone else's network,
 without putting any extra hardware into that network.**
 
-Four changes, nothing else.
+Five changes, nothing else.
 
 ---
 
@@ -133,6 +133,28 @@ correct answer.
 
 ---
 
+## 5. The sort order is actually saved
+
+`/roomSortOrder`, `/shadeSortOrder` and `/groupSortOrder` (`Web.cpp`) assigned the new
+`sortOrder` to each room, shade or group and answered `{"status":"OK"}` right away — without
+saving anything. Every other writing route commits (`Web.cpp:648`, `710`, `771`, `1423`,
+`1461`, `1502`), and for rooms and groups `save()` is nothing but a `somfy.commit()`
+(`Somfy.cpp:3111`). These three were the exception.
+
+The order therefore lived in RAM only and was gone after the next restart. Each handler now
+commits before it answers.
+
+**Why the bug looks intermittent.** `SomfyShadeController::commit()` (`Somfy.cpp:623`) writes
+the *entire* configuration. Any later, unrelated save — renaming a shade, assigning a room,
+setting a favourite position — picks up the pending sort order as a side effect. Reorder and
+then change something else, and the order sticks; reorder and pull the power, and it is lost.
+The handlers never set `isDirty` either, so no periodic commit catches it.
+
+This affects the bundled web UI exactly as much as any API client, and it is independent of
+everything else in this fork — the most obvious candidate of these five to go back upstream.
+
+---
+
 ## Building
 
 No local toolchain needed. `.github/workflows/ci.yaml` compiles all four board variants on
@@ -167,7 +189,8 @@ Static RAM on the ESP32: globals 95,096 bytes (29 %), leaving 232,584 bytes for 
 variables and the heap. A TLS session holds roughly 20–35 KB of that while open.
 
 **What these changes cost:** the v2.4.9 `esp32.bin` asset is 1,306,128 bytes against
-upstream v2.4.6's 1,305,536 — about **590 bytes** for all four patches. The TLS stack was
+upstream v2.4.6's 1,305,536 — about **590 bytes** for the first four patches. Patch 5 adds
+three call sites and has not been measured yet; read the release log once it is built. The TLS stack was
 already linked in for the OTA client, so `mqtts://` really is close to free. The 99 % is
 upstream's baseline on this core, not something this fork introduced.
 

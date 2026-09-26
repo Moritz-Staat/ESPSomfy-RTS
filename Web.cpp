@@ -2613,6 +2613,7 @@ void Web::begin() {
             if(room) room->sortOrder = order++;
           }
         }
+        somfy.commit();
         server.send(200, "application/json", "{\"status\":\"OK\",\"desc\":\"Successfully set room order\"}");
       }
       else {
@@ -2644,6 +2645,7 @@ void Web::begin() {
             if(shade) shade->sortOrder = order++;
           }
         }
+        somfy.commit();
         server.send(200, "application/json", "{\"status\":\"OK\",\"desc\":\"Successfully set shade order\"}");
       }
       else {
@@ -2675,6 +2677,7 @@ void Web::begin() {
             if(group) group->sortOrder = order++;
           }
         }
+        somfy.commit();
         server.send(200, "application/json", "{\"status\":\"OK\",\"desc\":\"Successfully set group order\"}");
       }
       else {
